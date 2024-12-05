@@ -1,0 +1,9 @@
+{
+    "sections": [
+        {
+            "title": "Getting Started",
+            "contentType": "file",
+            "path": "http://localhost:3001/content/getting-started.md"
+        }
+    ]
+}
