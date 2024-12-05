@@ -108,3 +108,23 @@
 .animate-spin {
     animation: spin 1s linear infinite;
 }
+
+@layer utilities {
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+        background: #f7fafc;
+        border-radius: 3px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: #cbd5e0;
+        border-radius: 3px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background-color: #a0aec0;
+    }
+}

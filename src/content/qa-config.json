@@ -4,6 +4,26 @@
             "title": "Getting Started",
             "contentType": "file",
             "path": "http://localhost:3001/content/getting-started.md"
+        },
+        {
+            "title": "Networking explained",
+            "contentType": "file",
+            "path": "http://localhost:3001/content/network_addresses_summary.md"
+        },
+        {
+            "title": "Remote sessions and VNC",
+            "contentType": "file",
+            "path": "http://localhost:3001/content/vnc_summary.md"
+        },
+        {
+            "title": "ST_Versions and PERL package managament",
+            "contentType": "file",
+            "path": "http://localhost:3001/content/20112024_summary_1.md"
+        },
+        {
+            "title": "Running tests on PIXIE",
+            "contentType": "file",
+            "path": "http://localhost:3001/content/20112024_summart_2.md"
         }
     ]
 }

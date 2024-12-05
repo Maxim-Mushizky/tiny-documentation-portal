@@ -1,13 +1,7 @@
-import * as React from "react"
-
-const Card = React.forwardRef(({ className, ...props }, ref) => (
-    <div ref={ref} className={`rounded-lg border bg-card text-card-foreground shadow-sm ${className}`} {...props} />
-))
-Card.displayName = "Card"
-
-const CardContent = React.forwardRef(({ className, ...props }, ref) => (
-    <div ref={ref} className={`p-6 pt-0 ${className}`} {...props} />
-))
-CardContent.displayName = "CardContent"
-
-export { Card, CardContent }
+export const Card = ({ children, className = '' }) => {
+    return (
+        <div className={`bg-white shadow-sm border border-gray-200 rounded-lg ${className}`}>
+            {children}
+        </div>
+    );
+};
