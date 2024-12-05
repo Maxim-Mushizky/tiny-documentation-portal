@@ -3,12 +3,15 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFile } from 'fs/promises';
 import cors from 'cors';
+import multer from 'express-fileupload';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+app.use(multer());
 
 // Cache for markdown content
 let contentCache = new Map();
@@ -82,4 +85,39 @@ app.get('/content/:filename', async (req, res) => {
 
 app.listen(3001, () => {
     console.log('Server running on http://localhost:3001');
+});
+
+// Add this endpoint
+app.post('/api/qa/create', async (req, res) => {
+    try {
+        const { title } = req.body;
+        const file = req.files.file;
+
+        if (!file) {
+            return res.status(400).send('No file uploaded');
+        }
+
+        // Create filename from title
+        const filename = title.toLowerCase().replace(/\s+/g, '_') + '.md';
+        const filePath = join(__dirname, 'src', 'content', filename);
+
+        // Save the file
+        await file.mv(filePath);
+
+        // Update qa-config.json
+        const configPath = join(__dirname, 'src', 'content', 'qa-config.json');
+        const configData = JSON.parse(await readFile(configPath, 'utf8'));
+
+        configData.sections.push({
+            title,
+            path: filename
+        });
+
+        await writeFile(configPath, JSON.stringify(configData, null, 2));
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error creating Q&A:', err);
+        res.status(500).send('Error creating Q&A');
+    }
 });
