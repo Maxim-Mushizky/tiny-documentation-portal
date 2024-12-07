@@ -1,31 +1,19 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import cors from 'cors';
-import multer from 'express-fileupload';
+import fileUpload from 'express-fileupload';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
 app.use(cors());
+app.use(fileUpload());
 app.use(express.json());
-app.use(multer());
 
-// Cache for markdown content
-let contentCache = new Map();
-
-// Function to load and cache content
-async function loadContent(filePath) {
-    if (contentCache.has(filePath)) {
-        return contentCache.get(filePath);
-    }
-    const content = await readFile(filePath, 'utf8');
-    contentCache.set(filePath, content);
-    return content;
-}
-
+// Serve static files from the content directory
 app.use('/content', express.static(join(__dirname, 'src', 'content')));
 
 app.get('/api/config', async (req, res) => {
@@ -40,84 +28,121 @@ app.get('/api/config', async (req, res) => {
 
 app.get('/api/search', async (req, res) => {
     try {
-        const query = req.query.q.toLowerCase();
+        const { q: query, mode = 'fuzzy' } = req.query;
+        console.log('Search request:', { query, mode });
+
         const configPath = join(__dirname, 'src', 'content', 'qa-config.json');
         const configData = await readFile(configPath, 'utf8');
         const { sections } = JSON.parse(configData);
 
         const results = await Promise.all(
             sections.map(async (section, index) => {
-                const filePath = join(__dirname, section.path.replace('http://localhost:3001', ''));
-                const content = await loadContent(filePath);
-                const matchesTitle = section.title.toLowerCase().includes(query);
-                const matchesContent = content.toLowerCase().includes(query);
+                try {
+                    const filePath = join(__dirname, 'src', 'content', section.path.replace('http://localhost:3001/content/', ''));
+                    const content = await readFile(filePath, 'utf8');
+                    const searchText = query.toLowerCase();
 
-                if (matchesTitle || matchesContent) {
-                    return {
-                        ...section,
-                        index,
-                        matches: {
-                            title: matchesTitle,
-                            content: matchesContent
+                    let matchesTitle = false;
+                    let matchesContent = false;
+
+                    if (mode === 'regex') {
+                        try {
+                            const regex = new RegExp(query, 'i');
+                            matchesTitle = regex.test(section.title);
+                            matchesContent = regex.test(content);
+                        } catch (e) {
+                            console.error('Invalid regex:', e);
+                            matchesTitle = section.title.toLowerCase().includes(searchText);
+                            matchesContent = content.toLowerCase().includes(searchText);
                         }
-                    };
+                    } else {
+                        matchesTitle = section.title.toLowerCase().includes(searchText);
+                        matchesContent = content.toLowerCase().includes(searchText);
+                    }
+
+                    if (matchesTitle || matchesContent) {
+                        return {
+                            title: section.title,
+                            index,
+                            matches: {
+                                title: matchesTitle,
+                                content: matchesContent
+                            }
+                        };
+                    }
+                } catch (error) {
+                    console.error(`Error processing file for section ${section.title}:`, error);
                 }
                 return null;
             })
         );
 
-        res.json(results.filter(Boolean));
+        const filteredResults = results.filter(Boolean);
+        res.json(filteredResults);
     } catch (err) {
         console.error('Search error:', err);
         res.status(500).send('Error performing search');
     }
 });
 
-app.get('/content/:filename', async (req, res) => {
+app.post('/api/qa/create', async (req, res) => {
     try {
-        const filePath = join(__dirname, 'src', 'content', req.params.filename);
-        const data = await loadContent(filePath);
-        res.send(data);
-    } catch (err) {
-        res.status(404).send('File not found');
+        if (!req.files || !req.files.file) {
+            return res.status(400).json({ success: false, message: 'No file uploaded' });
+        }
+
+        const { title } = req.body;
+        const markdownFile = req.files.file;
+
+        // Sanitize filename
+        const sanitizedTitle = title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+        const filename = `${sanitizedTitle}.md`;
+        const filePath = join(__dirname, 'src', 'content', filename);
+
+        // Save the markdown file
+        await markdownFile.mv(filePath);
+
+        // Update qa-config.json
+        const configPath = join(__dirname, 'src', 'content', 'qa-config.json');
+        let config = { sections: [] };
+
+        try {
+            const configData = await readFile(configPath, 'utf-8');
+            config = JSON.parse(configData);
+        } catch (error) {
+            console.warn('Config file not found, creating new one');
+        }
+
+        // Add new section
+        config.sections.push({
+            title: title,
+            contentType: "file",
+            path: `http://localhost:3001/content/${filename}`
+        });
+
+        // Write updated config
+        await writeFile(configPath, JSON.stringify(config, null, 2));
+
+        res.json({
+            success: true,
+            message: 'Q&A created successfully',
+            path: `/content/${filename}`
+        });
+
+    } catch (error) {
+        console.error('Error creating Q&A:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create Q&A',
+            error: error.message
+        });
     }
 });
 
 app.listen(3001, () => {
     console.log('Server running on http://localhost:3001');
-});
-
-// Add this endpoint
-app.post('/api/qa/create', async (req, res) => {
-    try {
-        const { title } = req.body;
-        const file = req.files.file;
-
-        if (!file) {
-            return res.status(400).send('No file uploaded');
-        }
-
-        // Create filename from title
-        const filename = title.toLowerCase().replace(/\s+/g, '_') + '.md';
-        const filePath = join(__dirname, 'src', 'content', filename);
-
-        // Save the file
-        await file.mv(filePath);
-
-        // Update qa-config.json
-        const configPath = join(__dirname, 'src', 'content', 'qa-config.json');
-        const configData = JSON.parse(await readFile(configPath, 'utf8'));
-
-        configData.sections.push({
-            title,
-            path: filename
-        });
-
-        await writeFile(configPath, JSON.stringify(configData, null, 2));
-
-        res.json({ success: true });
-    } catch (err) {
-        console.error('Error creating Q&A:', err);
-        res.status(500).send('Error creating Q&A');
-    }
 });
